@@ -16,6 +16,7 @@ github_repo_url = f"https://github.com/j0rdiC/{project_name}"
 
 app = typer.Typer()
 
+
 def cmd(command: str | list[str], **kwargs) -> subprocess.CompletedProcess:
     try:
         command = command.split() if type(command) is str else command
@@ -23,6 +24,7 @@ def cmd(command: str | list[str], **kwargs) -> subprocess.CompletedProcess:
     except subprocess.CalledProcessError as e:
         print(e)
         raise typer.Exit()
+
 
 @app.command()
 def init(
