@@ -117,6 +117,16 @@ const router = Router()\n
         template += "\nexport default router\n"
         return template
 
+    def route_with_framework_template(self, methods: list[str]):
+        template = f"""import {{ app }} from '../../framework/app'"""
+        if self.with_model:
+            template += f"""{templates['models']['import'](self.name)}\n
+app.route(
+  '/{self.name}s', {{
+  model: {self.name.capitalize()},
+}})
+"""
+
     def model_template(self):
         model_name = self.name.capitalize()
         return f"""import {{ Schema, model, Types, Model }} from 'mongoose'
@@ -147,7 +157,8 @@ export const {self.name}Body = z.object({{
 
     def append_to_index(self):
         content = self.routes_index.read_text()
-        content += f"export {{ default as {self.name}sRouter }} from './{self.name}s.route'\n"
+        # content += f"export {{ default as {self.name}sRouter }} from './{self.name}s.route'\n"
+        content += f"import ./routes/{self.name}s.route'\n"
         self.routes_index.write_text(content)
 
     def append_to_app(self):
