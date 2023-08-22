@@ -1,11 +1,15 @@
 import os
 import subprocess
 from pathlib import Path
+from time import sleep
 from typing import Optional
 from typing_extensions import Annotated
 from rich import print
-import typer
-
+from rich.console import Console
+from rich.panel import Panel
+from rich.progress import Progress
+from rich.theme import Theme
+from typer import Typer, Option, Argument, Exit
 from templates import Writer
 
 
@@ -14,7 +18,10 @@ branch_name = "socket-and-mongo-listener"
 github_repo_url = f"https://github.com/j0rdiC/{project_name}"
 
 
-app = typer.Typer()
+app = Typer()
+
+
+console = Console()
 
 
 def cmd(command: str | list[str], **kwargs) -> subprocess.CompletedProcess:
@@ -22,36 +29,45 @@ def cmd(command: str | list[str], **kwargs) -> subprocess.CompletedProcess:
         command = command.split() if type(command) is str else command
         return subprocess.run(command, check=True, **kwargs)
     except subprocess.CalledProcessError as e:
-        print(e)
-        raise typer.Exit()
+        print(e.stderr.decode())
+        raise Exit()
 
 
 @app.command()
 def init(
-    project_path: Annotated[Path, typer.Argument(help="Project path")] = Path.cwd() / 'server',
-    intall_deps: Annotated[bool, typer.Option('-i', '--install', help="Install dependencies")] = False
+    project_path: Annotated[Path, Argument(help="Project path")] = Path.cwd() / 'server',
+    source_branch: Annotated[str, Option('-b', '--branch', help="Source branch")] = branch_name,
+    intall_deps: Annotated[bool, Option('-i', '--install', help="Install dependencies")] = False,
 ):
-    cmd(f"git clone --single-branch --branch {branch_name} {github_repo_url} {project_path}")
+    if project_path.exists():
+        print(f"Project path '{project_path}' already exists")
+        raise Exit()
+
+    cmd(f"git clone --single-branch --branch {source_branch} {github_repo_url} {project_path}",
+        stdout=subprocess.DEVNULL)
+
     os.chdir(project_path)
+    if intall_deps:
+        cmd('npm install')
+
     cmd('rm -rf .git')
     cmd('git init')
     cmd('git add .')
     cmd(['git', 'commit', '-m', 'Initial commit'], stdout=subprocess.DEVNULL)
-    if intall_deps:
-        subprocess.run(['npm', 'install'])
-    print(f"\n[green]✓[/] Project [blue]{project_path}[/] created successfully")
+
+    print(f"\n[bold green]✓[/] Project [blue]{project_path}[/] created successfully")
 
 
 @app.command()
 def route(
     name: str,
-    methods: Annotated[Optional[list[str]], typer.Argument(help="Add specific http methods")] = None,
-    with_model: Annotated[bool, typer.Option('-m', '--model', help="Create a model")] = False,
-    with_handler: Annotated[bool, typer.Option('-h', '--handler', help="Use the generic route handler")] = False,
+    methods: Annotated[Optional[list[str]], Argument(help="Add specific http methods")] = None,
+    with_model: Annotated[bool, Option('-m', '--model', help="Create a model")] = False,
+    with_handler: Annotated[bool, Option('-h', '--handler', help="Use the generic route handler")] = False,
 ):
     if with_handler and not with_model:
         print("The --handler option must be used with the --model option")
-        raise typer.Exit()
+        raise Exit()
 
     writer = Writer(name, with_model, with_handler)
     writer.write(methods)
@@ -61,6 +77,45 @@ def route(
 @app.command()
 def model(name: str):
     print(name)
+
+
+@app.command()
+def test(
+    project_path: Annotated[Path, Argument(help="Project path")] = Path.cwd() / 'server',
+    source_branch: Annotated[str, Option('-b', '--branch', help="Source branch")] = branch_name,
+    intall_deps: Annotated[bool, Option('-i', '--install', help="Install dependencies")] = False,
+):
+    print(project_path)
+    print(source_branch)
+    print(intall_deps)
+    console.print("[ok]Project[/] path already exists")
+
+    JOBS = [100, 150, 25, 70, 110, 90]
+
+    progress = Progress(auto_refresh=False)
+    master_task = progress.add_task("overall", total=sum(JOBS))
+    jobs_task = progress.add_task("jobs")
+
+    progress.console.print(
+        Panel(
+            "[bold blue]A demonstration of progress with a current task and overall progress.",
+            padding=1,
+        )
+    )
+
+    with progress:
+        for job_no, job in enumerate(JOBS):
+            progress.log(f"Starting job #{job_no}")
+            sleep(0.2)
+            progress.reset(jobs_task, total=job, description=f"job [bold yellow]#{job_no}")
+            progress.start_task(jobs_task)
+            for wait in progress.track(range(job), task_id=jobs_task):
+                sleep(0.01)
+            progress.advance(master_task, job)
+            progress.log(f"Job #{job_no} is complete")
+        progress.log(
+            Panel(":sparkle: All done! :sparkle:", border_style="green", padding=1)
+        )
 
 
 if __name__ == "__main__":
